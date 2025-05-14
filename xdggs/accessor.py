@@ -2,6 +2,7 @@ import numpy.typing as npt
 import xarray as xr
 
 from xdggs.grid import DGGSInfo
+from xdggs.healpix import HealpixInfo, groupby_healpix
 from xdggs.index import DGGSIndex
 from xdggs.plotting import explore
 
@@ -209,3 +210,62 @@ class DGGSAccessor:
             alpha=alpha,
             coords=coords,
         )
+
+    def groupby(self, coarsen: int | None = None, /, level: int | None = None):
+        """Aggregate data on a higher grid level.
+
+        Parameters
+        ----------
+        coarsen : int, optional
+            How many levels to coarsen by relative to your current level.
+        level : int, optional
+            The target level of the grid you want to group towards. This is the level of the resulting data.
+
+        Returns
+        -------
+        grouped : DataArrayGroupBy or DatasetGroupBy
+            An xarray groupby object.
+
+        Notes
+        -----
+        Either `coarsen` or `level` must be provided, but not both.
+
+        """
+        # Check that exactly one parameter is provided
+        if coarsen is None and level is None:
+            raise ValueError("Either 'coarsen' or 'level' must be provided")
+        if coarsen is not None and level is not None:
+            raise ValueError("Only one of 'coarsen' or 'level' can be provided")
+
+        if coarsen is not None:
+            if not isinstance(coarsen, int):
+                raise ValueError(
+                    f"Expected 'coarsen' to be of type int. Got {type(coarsen).__name__}"
+                )
+            level = self.grid_info.level - coarsen
+        del coarsen
+
+        if not isinstance(level, int):
+            raise ValueError(
+                f"Expected level to be of type {{int}}. Got {type(level).__name__}"
+            )
+
+        if self.grid_info.level < level:
+            raise ValueError(
+                f"Cannot group to level {level} on a grid with level {self.grid_info.level}."
+            )
+
+        coarsen = self.grid_info.level - level
+
+        if not isinstance(self.grid_info, HealpixInfo):
+            raise ValueError("Grouping is currently only supported for Healpix grids.")
+
+        return groupby_healpix(self._obj, coarsen, grid_info=self.grid_info)
+
+
+def assert_valid_level(level: int) -> None:
+    if not isinstance(level, int):
+        raise ValueError(f"level must be an integer, got {type(level).__name__}")
+
+    if level < 0:
+        raise ValueError(f"level must be a non-negative integer, got {level}")
